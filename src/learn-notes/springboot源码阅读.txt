@@ -136,17 +136,19 @@ getSpringFactoriesInstances
 								将loaded中的MutablePropertySource[profile]添加到enviroment.propertySources中，addLast()但在defaultProperties前
 							--applyActiveProfiles(defaultProperties)
 								if defaultProperties!=null
-									加载配置的profile，合并processedProfiles值，
+									加载配置的profile，合并processedProfiles值
+									environment.setActiveProfiles();
+
 								--load spring.config.location参数
 									--取spring.config.name值，默认值为application		
 					--load(xxxx)方法：
-						getSearchLocations()
-							*spring.config.location指定自定义配置地址，return；空时值为null
+						--getSearchLocations()
+							*spring.config.location指定自定义配置地址，return；
 							*spring.config.additional-location，追加的配置地址
 							*默认location值classpath:/,classpath:/config/,file:./,file:./config/，做了倒排序，所以file:./config/是第一个
-						遍历loacations->
+						--遍历loacations->
 							if location.endsWith("/")，调用getSearchNames(),
-								*spring.config.name自动配置名，空时值为null
+								*spring.config.name自动配置名
 								*默认name=application
 							else name=null(指定文件名时)
 								
