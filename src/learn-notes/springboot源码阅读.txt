@@ -1,0 +1,224 @@
+
+1.初始化准备：
+
+1)sources= LinkedHashSet 
+	class com.example.demo.DemoApplication
+2)initializeres
+3)listeners
+getSpringFactoriesInstances
+	1）从spring.factories文件获取值
+	key=interface org.springframework.context.ApplicationContextInitializer
+	value--LinkedHashSet:
+		0 = "org.springframework.boot.context.ConfigurationWarningsApplicationContextInitializer"(spring-boot)
+		1 = "org.springframework.boot.context.ContextIdApplicationContextInitializer"(spring-boot)
+		2 = "org.springframework.boot.context.config.DelegatingApplicationContextInitializer"(spring-boot)
+		3 = "org.springframework.boot.context.embedded.ServerPortInfoApplicationContextInitializer"(spring-boot)
+		4 = "org.springframework.boot.autoconfigure.SharedMetadataReaderFactoryContextInitializer"  （spring-boot-autoconfigure）
+		5 = "org.springframework.boot.autoconfigure.logging.AutoConfigurationReportLoggingInitializer"（spring-boot-autoconfigure）
+	
+	createSpringFactoriesInstances
+		 BeanUtils.instantiateClass
+	排序	 
+	SORT---AnnotationAwareOrderComparator--
+	
+	
+	2）从spring.factories文件获取值
+	key=org.springframework.context.ApplicationListener
+	value--LinkedHashSet:
+		0 = "org.springframework.boot.ClearCachesApplicationListener"(spring-boot)--ContextRefreshedEvent
+		1 = "org.springframework.boot.builder.ParentContextCloserApplicationListener"--ParentContextAvailableEvent
+		2 = "org.springframework.boot.context.FileEncodingApplicationListener"--ApplicationEnvironmentPreparedEvent
+		3 = "org.springframework.boot.context.config.AnsiOutputApplicationListener"
+		4 = "org.springframework.boot.context.config.ConfigFileApplicationListener"
+		5 = "org.springframework.boot.context.config.DelegatingApplicationListener"
+		6 = "org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener"
+		7 = "org.springframework.boot.logging.ClasspathLoggingApplicationListener"--debug时打印classpath，ApplicationEnvironmentPreparedEvent与ApplicationFailedEvent
+		8 = "org.springframework.boot.logging.LoggingApplicationListener"(spring-boot)--根据配置初始化日志系统log
+		9 = "org.springframework.boot.autoconfigure.BackgroundPreinitializer"（spring-boot-autoconfigure）
+		
+4)mainApplicationClass = class com.example.demo.DemoApplication
+
+
+
+
+
+2、run
+2.1 执行方法	ConfigurableApplicationContext run(String... args)
+	1）StopWatch计时
+	2）设置系统参数java.awt.headless为true，在headless模式下运行
+		System.setProperty("java.awt.headless",true)
+	3）初始化SpringApplicationRunListener并逐一调用starting()方法，Spring默认只有一个实例；
+		工厂模式，利用SpringApplicationRunListeners类存储SpringApplicationRunListener列表，遍历调用starting()方法，利于扩展。
+		starter组件spring.factories中添加配置可以实现自定义的runListster
+		默认只有一个org.springframework.boot.context.event.EventPublishingRunListener
+		
+		初始化过程：
+		1、application
+		2、arg
+		3、SimpleApplicationEventMulticaster初始化并且listerner列表赋值
+			org.springframework.context.event.AbstractApplicationEventMulticaster#addApplicationListener
+				--加锁、存储在属性defaultRetriever（包装类AbstractApplicationEventMulticaster.ListenerRetriever）的applicationListeners[new LinkedHashSet()]
+				--如果listener是proxy对象，会将targetSource对象从applicationListeners移除
+		
+		starting()方法，发布event，
+			1.5.21发布的是ApplicationStartingEvent，2.x后改为ApplicationStartingEvent
+		
+		org.springframework.context.event.SimpleApplicationEventMulticaster#multicastEvent(org.springframework.context.ApplicationEvent)
+			--event对应ResolvableType（默认是event的Class作为resolved值）
+			AbstractApplicationEventMulticaster#getApplicationListeners(ApplicationEvent, ResolvableType)方法获取注册的listener
+			缓存--eventType[ResolvableType]与sourceType[SpringBootApplication.class]作为cacheKey
+		遍历调用listener.onApplicationEvent(event)方法
+	 
+	 
+	
+	 发布事件ApplicationStartingEvent
+		0 = {LoggingApplicationListener@1236} --获取LoggingSystem类，按顺序取第一个org.springframework.boot.logging.logback.LogbackLoggingSystem，调用beforeInitialize()；
+				根据配置初始化日志系统log
+		1 = {BackgroundPreinitializer@1238} --异步初始化ConversionServiceInitializer、ValidationInitializer、MessageConverterInitializer、JacksonInitializer、CharsetInitializer
+		2 = {DelegatingApplicationListener} --未生效，仅对ApplicationEnvironmentPreparedEvent触发
+		3 = {LiquibaseServiceLocatorApplicationListener@1243} ...liquibase.servicelocator.CustomResolverServiceLocator类引入时才执行
+	 
+	4）初始化ApplicationArguments--对应实体DefaultApplicationArguments 
+	
+	5）prepareEnvironment
+	
+		a.初始化ConfigurableEnvironment--customizePropertySources()方法加载参数
+			StandardServletEnvironment（servletConfigInitParams、servletContextInitParams，extend[systemProperties、systemEnvironment]）
+			StandardReactiveWebEnvironment 同StandardEnvironment
+			StandardEnvironment（systemProperties、systemEnvironment）
+		b.入参args加入source
+		c.加载configurationProperties
+
+	6）发布事件ApplicationEnvironmentPreparedEvent
+		0 = {ConfigFileApplicationListener@2151}-重要（读取加载springboot配置文件）
+			--loadPostProcessors();
+				0 = {SystemEnvironmentPropertySourceEnvironmentPostProcessor@1675} --处理systemEnvironment
+					--SystemEnvironmentPropertySource替换为OriginAwareSystemEnvironmentPropertySource，添加了Orign跟踪
+				1 = {SpringApplicationJsonEnvironmentPostProcessor@1676} 
+					--spring.application.json、SPRING_APPLICATION_JSON
+				2 = {CloudFoundryVcapEnvironmentPostProcessor@1677}
+					--从Cloud Foundry加载参数--VCAP_APPLICATION、VCAP_SERVICES，提供springCloud支持
+				3 = {DebugAgentEnvironmentPostProcessor@1678} 
+				
+			--postProcessors.add(this)--
+			--sort后，this的index是3；
+				添加source-RandomValuePropertySource {name='random'}
+				
+				new Loader(environment, resourceLoader).load();添加不同profile的参数值
+					--Loader()
+						*environment，
+						*PropertySourcesPlaceholdersResolver初始化:
+							source--from enviroment
+							hepler--PropertyPlaceholderHelper占位符解析:${:}，resolvePlaceholders()方法作用：将${name}值替换为name参数的配置值
+						*resourceLoader	
+						*propertySourceLoaders--从spring.factories文件获取值org.springframework.boot.env.PropertySourceLoader
+								org.springframework.boot.env.PropertiesPropertySourceLoader,--{ "properties", "xml" }后缀文件
+								org.springframework.boot.env.YamlPropertySourceLoader--{ "yml", "yaml" }
+					--ConfigFileApplicationListener.Loader#load()
+						*profiles=new LinkedList<>()
+						*processedProfiles=new LinkedList<>()
+						*loaded=new LinkedHashMap<>()
+						--initializeProfiles()：		
+							-- profiles
+								*1.add(null)
+								*2.add(otherActiveProfiles)--除includedViaProperty、activatedViaProperty外enviroment中的profiles
+								*3.add(includedViaProperty)--spring.profiles.include，environment配置
+								*4.add(activatedViaProperty)--spring.profiles.active，environment配置
+								*如果没有配置系统参数，profiles只有一个元素，添加默认Profile，defaultProfileName = 'default'
+							--遍历profiles
+								if 是默认profile，
+									environment.getActiveProfiles()--根据spring.profiles.active值加载
+									environment.addActiveProfile(defaultProfile)；添加++
+								--load(xxxx)方法--加载profile
+								--processedProfiles.add(profile)，
+							--补充load(xxx)：profile == null && !ObjectUtils.isEmpty(document.getProfiles())
+							--addLoadedPropertySources();
+								将loaded中的MutablePropertySource[profile]添加到enviroment.propertySources中，addLast()但在defaultProperties前
+							--applyActiveProfiles(defaultProperties)
+								if defaultProperties!=null
+									加载配置的profile，合并processedProfiles值，
+								--load spring.config.location参数
+									--取spring.config.name值，默认值为application		
+					--load(xxxx)方法：
+						getSearchLocations()
+							*spring.config.location指定自定义配置地址，return；空时值为null
+							*spring.config.additional-location，追加的配置地址
+							*默认location值classpath:/,classpath:/config/,file:./,file:./config/，做了倒排序，所以file:./config/是第一个
+						遍历loacations->
+							if location.endsWith("/")，调用getSearchNames(),
+								*spring.config.name自动配置名，空时值为null
+								*默认name=application
+							else name=null(指定文件名时)
+								
+							
+		1 = {AnsiOutputApplicationListener@2179} --参数spring.output.ansi.enabled、spring.output.ansi.console-available，终端支持ANSI，彩色输出
+		2 = {LoggingApplicationListener@1237}--initialize() 
+		3 = {ClasspathLoggingApplicationListener@2180} --debug时打印classpath
+		4 = {BackgroundPreinitializer@1353} --类静态CountDownLatch锁，ApplicationStartingEvent执行后才会唤醒
+		5 = {DelegatingApplicationListener@1356} --参数context.listener.classes有值时，生成一个SimpleApplicationEventMulticaster，加载对应listener并发布event，代理类
+		6 = {FileEncodingApplicationListener@2181} --如果配置了spring.mandatory-file-encoding参数，和系统参数file.encoding不一致会报错
+		
+	 
+3、注解
+	@SpringBootApplication	 
+		@SpringBootConfiguration ->@Configuration
+		@EnableAutoConfiguration ->自动配置
+		@ComponentScan	->扫描组件包
+	 
+	 
+springboot master分支、2.0.x,1.5.x分支的关系和区别？	 
+SimpleApplicationEventMulticaste的	Map<ListenerCacheKey, ListenerRetriever> retrieverCache 属性可以按envent类型快速获取对应的listener
+	
+napture的加载用到了DefaultPropertySourceLocator做参数加载
+spring.factories文件中添加了自动配置类。	
+	 
+	
+
+•Spring Boot是如何让系统开发效率飞起
+-starter组件
+
+how？
+1、流程步骤，关键类与方法
+2、类图关系-作用
+3、事件消息机制、配置自动加载、starter原理、refresh-context容器初始化、主要注解、web-内置serverlet容器、环境系统、日志系统
+	
+	
+	
+精彩文章
+微众-吉姆餐厅ak-springboot源码：http://mp.weixin.qq.com/mp/homepage?__biz=MzUwOTk1MTE5NQ==&hid=2&sn=837d8daa637b93c7087800a41f7e012f&scene=18#wechat_redirect
+https://blog.csdn.net/zhang_yinan/article/details/80743585
+https://blog.csdn.net/dm_vincent/article/details/76735888	
+	
+	
+spring 时间广播机制	
+	
+
+示例
+
+1、添加一个starter模块，自动加载初始化类和环境参数	
+2、添加一个监控器，监听广播事件--用途？	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
