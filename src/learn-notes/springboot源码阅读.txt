@@ -26,15 +26,26 @@ getSpringFactoriesInstances
 	key=org.springframework.context.ApplicationListener
 	value--LinkedHashSet:
 		0 = "org.springframework.boot.ClearCachesApplicationListener"(spring-boot)--ContextRefreshedEvent
+
 		1 = "org.springframework.boot.builder.ParentContextCloserApplicationListener"--ParentContextAvailableEvent
+		      容器关闭时发出通知，如果父容器关闭，那么自容器也一起关闭
 		2 = "org.springframework.boot.context.FileEncodingApplicationListener"--ApplicationEnvironmentPreparedEvent
-		3 = "org.springframework.boot.context.config.AnsiOutputApplicationListener"
-		4 = "org.springframework.boot.context.config.ConfigFileApplicationListener"
-		5 = "org.springframework.boot.context.config.DelegatingApplicationListener"
+		    在springboot环境准备完成以后运行，获取环境中的系统环境参数，检测当前系统环境的file.encoding和spring.mandatory-file-encoding设置的值是否一样,如果不一样则抛出异常
+		    如果不配置spring.mandatory-file-encoding则不检查
+		3 = "org.springframework.boot.context.config.AnsiOutputApplicationListener"--ApplicationEnvironmentPreparedEvent
+		    在springboot环境准备完成以后运行， 如果你的终端支持ANSI，设置彩色输出会让日志更具可读性。
+		4 = "org.springframework.boot.context.config.ConfigFileApplicationListener"--ApplicationEnvironmentPreparedEvent
+		    很重要，详讲
+		5 = "org.springframework.boot.context.config.DelegatingApplicationListener"--ApplicationEnvironmentPreparedEvent
+		    通过context.listener.classes参数加载Listener，转发event给配置的这些class处理，这样可以支持外围代码不去写spring.factories中的org.springframework.context.ApplicationListener相关配置，保持springboot原来代码的稳定
 		6 = "org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener"
-		7 = "org.springframework.boot.logging.ClasspathLoggingApplicationListener"--debug时打印classpath，ApplicationEnvironmentPreparedEvent与ApplicationFailedEvent
-		8 = "org.springframework.boot.logging.LoggingApplicationListener"(spring-boot)--根据配置初始化日志系统log
-		9 = "org.springframework.boot.autoconfigure.BackgroundPreinitializer"（spring-boot-autoconfigure）
+		    如果存在，则使用springboot相关的版本进行替代
+		7 = "org.springframework.boot.logging.ClasspathLoggingApplicationListener"--ApplicationEnvironmentPreparedEvent与ApplicationFailedEvent
+		    --debug时打印classpath，
+		8 = "org.springframework.boot.logging.LoggingApplicationListener"(spring-boot)--ApplicationStartingEvent、ApplicationEnvironmentPreparedEvent
+		    --根据配置初始化日志系统log
+		9 = "org.springframework.boot.autoconfigure.BackgroundPreinitializer"（spring-boot-autoconfigure）--ApplicationStartingEvent、ApplicationReadyEvent、ApplicationFailedEvent
+		    --ApplicationStartingEvent出发异步预初始化，利用类静态CountDownLatch锁，阻塞ApplicationReadyEvent、ApplicationFailedEvent，直到保证异步初始化结束
 		
 4)mainApplicationClass = class com.example.demo.DemoApplication
 
@@ -80,31 +91,41 @@ getSpringFactoriesInstances
 	 
 	4）初始化ApplicationArguments--对应实体DefaultApplicationArguments 
 	
-	5）prepareEnvironment
-	
-		a.初始化ConfigurableEnvironment--customizePropertySources()方法加载参数
-			StandardServletEnvironment（servletConfigInitParams、servletContextInitParams，extend[systemProperties、systemEnvironment]）
-			StandardReactiveWebEnvironment 同StandardEnvironment
-			StandardEnvironment（systemProperties、systemEnvironment）
-		b.入参args加入source
-		c.加载configurationProperties
-
-	6）发布事件ApplicationEnvironmentPreparedEvent
-		0 = {ConfigFileApplicationListener@2151}-重要（读取加载springboot配置文件）
-			--loadPostProcessors();
-				0 = {SystemEnvironmentPropertySourceEnvironmentPostProcessor@1675} --处理systemEnvironment
-					--SystemEnvironmentPropertySource替换为OriginAwareSystemEnvironmentPropertySource，添加了Orign跟踪
-				1 = {SpringApplicationJsonEnvironmentPostProcessor@1676} 
-					--spring.application.json、SPRING_APPLICATION_JSON
-				2 = {CloudFoundryVcapEnvironmentPostProcessor@1677}
-					--从Cloud Foundry加载参数--VCAP_APPLICATION、VCAP_SERVICES，提供springCloud支持
-				3 = {DebugAgentEnvironmentPostProcessor@1678} 
-				
+	5）prepareEnvironment()
+	    --getOrCreateEnvironment()初始化系统环境参数，environment.propertySources
+	        new()方法中调用customizePropertySources()方法加载PropertySources
+	        +StandardEnvironment（systemProperties、systemEnvironment）
+	        +StandardReactiveWebEnvironment 同StandardEnvironment
+	        +StandardServletEnvironment（StubPropertySource：servletConfigInitParams、servletContextInitParams，PropertiesPropertySource[systemProperties、systemEnvironment]）
+		--configureEnvironment()--sources or profiles
+		    --addConversionService...
+		    --configurePropertySources()初始化defaultProperties、启动参数
+		        if-defaultProperties，默认无
+			    if-addCommandLineProperties&&argsargs.length > 0 启动参数
+			        addFisrst()-commandLineArgs [springApplicationCommandLineArgs]，优先级高于systemProperties
+        --ConfigurationPropertySources.attach()
+            添加最高优先级configurationProperties--值为已有的source集合
+	    --发布事件ApplicationEnvironmentPreparedEvent
+		    0 = ConfigFileApplicationListener-加载springboot配置文件
+			--loadPostProcessors();--从spring.facotries中读取EnvironmentPostProcessor值
+				默认4个
 			--postProcessors.add(this)--
 			--sort后，this的index是3；
-				添加source-RandomValuePropertySource {name='random'}
+			--遍历postProcessors
+                0 = SystemEnvironmentPropertySourceEnvironmentPostProcessor --处理systemEnvironment
+					--SystemEnvironmentPropertySource替换为OriginAwareSystemEnvironmentPropertySource，添加了Orign跟踪
+				1 = SpringApplicationJsonEnvironmentPostProcessor
+					--spring.application.json、SPRING_APPLICATION_JSON有值时初始化JsonPropertyValue（仅取第一个）
+				    添加配置JsonPropertySource，name = spring.application.json,优先级仅高于systemProperties
+				2 = {CloudFoundryVcapEnvironmentPostProcessor@1677}
+					--从Cloud Foundry加载参数--VCAP_APPLICATION、VCAP_SERVICES，提供springCloud支持
+					添加配置PropertiesPropertySource,name=vcap,优先级仅低于commandLineArgs
+				3 = this
+				4 = DebugAgentEnvironmentPostProcessor 			    ......
+			    this:
+				--添加source-RandomValuePropertySource {name='random'}，优先级仅低于systemEnvironment
 				
-				new Loader(environment, resourceLoader).load();添加不同profile的参数值
+				new Loader(environment, resourceLoader).load()--加载配置文件，支持profile
 					--Loader()
 						*environment，
 						*PropertySourcesPlaceholdersResolver初始化:
@@ -114,6 +135,7 @@ getSpringFactoriesInstances
 						*propertySourceLoaders--从spring.factories文件获取值org.springframework.boot.env.PropertySourceLoader
 								org.springframework.boot.env.PropertiesPropertySourceLoader,--{ "properties", "xml" }后缀文件
 								org.springframework.boot.env.YamlPropertySourceLoader--{ "yml", "yaml" }
+								**properties文件优先级最高
 					--ConfigFileApplicationListener.Loader#load()
 						*profiles=new LinkedList<>()
 						*processedProfiles=new LinkedList<>()
@@ -125,41 +147,97 @@ getSpringFactoriesInstances
 								*3.add(includedViaProperty)--spring.profiles.include，environment配置
 								*4.add(activatedViaProperty)--spring.profiles.active，environment配置
 								*如果没有配置系统参数，profiles只有一个元素，添加默认Profile，defaultProfileName = 'default'
-							--遍历profiles
-								if 是默认profile，
-									environment.getActiveProfiles()--根据spring.profiles.active值加载
-									environment.addActiveProfile(defaultProfile)；添加++
-								--load(xxxx)方法--加载profile
+						--遍历profiles
+							if 默认profile，
+								environment.getActiveProfiles()--根据spring.profiles.active值加载
+								environment.addActiveProfile(defaultProfile)；添加++
+							--load(xxxx)方法--加载profile
 								--processedProfiles.add(profile)，
 							--补充load(xxx)：profile == null && !ObjectUtils.isEmpty(document.getProfiles())
-							--addLoadedPropertySources();
+							    最后加载有spring.profiles参数的默认文件
+							--processedProfiles.add(profile)
+						--addLoadedPropertySources();
 								将loaded中的MutablePropertySource[profile]添加到enviroment.propertySources中，addLast()但在defaultProperties前
-							--applyActiveProfiles(defaultProperties)
+								loaded做了倒排序，优先级默认文件<profile
+								示例顺序：
+								0-classpath:/config/application.yml
+								1-classpath:/application.properties
+								2-classpath:/application.yml
+						--applyActiveProfiles(defaultProperties)
 								if defaultProperties!=null
 									加载配置的profile，合并processedProfiles值
 									environment.setActiveProfiles();
+					    --load(xxxx)方法：
+						    --getSearchLocations()
+							    *spring.config.location指定自定义配置地址，return；
+							    *spring.config.additional-location，追加的配置地址，优先级>默认location值
+							    *默认location值classpath:/,classpath:/config/,file:./,file:./config/，做了倒排序，所以file:./config/优先级最高，classpath:/config/>classpath:/
+							        file:文件路径--项目jar包目录
+							        classpath:class路径查找，没有的话依次在其他jar包中class路径查找，找到第一个匹配的为止
 
-								--load spring.config.location参数
-									--取spring.config.name值，默认值为application		
-					--load(xxxx)方法：
-						--getSearchLocations()
-							*spring.config.location指定自定义配置地址，return；
-							*spring.config.additional-location，追加的配置地址
-							*默认location值classpath:/,classpath:/config/,file:./,file:./config/，做了倒排序，所以file:./config/是第一个
-						--遍历loacations->
-							if location.endsWith("/")，调用getSearchNames(),
-								*spring.config.name自动配置名
-								*默认name=application
-							else name=null(指定文件名时)
-								
-							
-		1 = {AnsiOutputApplicationListener@2179} --参数spring.output.ansi.enabled、spring.output.ansi.console-available，终端支持ANSI，彩色输出
-		2 = {LoggingApplicationListener@1237}--initialize() 
-		3 = {ClasspathLoggingApplicationListener@2180} --debug时打印classpath
-		4 = {BackgroundPreinitializer@1353} --类静态CountDownLatch锁，ApplicationStartingEvent执行后才会唤醒
-		5 = {DelegatingApplicationListener@1356} --参数context.listener.classes有值时，生成一个SimpleApplicationEventMulticaster，加载对应listener并发布event，代理类
-		6 = {FileEncodingApplicationListener@2181} --如果配置了spring.mandatory-file-encoding参数，和系统参数file.encoding不一致会报错
-		
+						    --遍历loacations->
+							    if location.endsWith("/")，调用getSearchNames(),
+								    *spring.config.name自动配置名
+								    *默认name=application
+							     else name=null(指定location值含文件名时)
+							    --load() 加载文件配置MutablePropertySources，保存到loaded属性
+							        格式：String profileSpecificFile = prefix + "-" + profile + fileExtension;
+
+                                	+profile有值时，获取的文件名是application-profile.xxx;
+                                	    *文件中无spring.profiles参数时加载配置到loaded
+                                	    *有spring.profiles参数时，必须包含指定profile才加载
+                                    +默认文件名application.xxx，MutablePropertySources.name=applicationConfig: [classpath:/config/application.yml]
+                                        *文件中无spring.profiles参数时加载
+                                    profile优先级高
+
+						        优先级顺序：profile>location>.ext
+						        config/application-default.properties > config/application-default.yml > application-default.properties > application-default.yml > config/application.properties > config/application.yml > application.properties > application.yml
+
+						疑问UNDO:
+						    1、配置参数值是值怎么赋值给bean的时？
+						    2、配置参数最后使用哪个值？propertySources中优先级最高的最后加载？
+						    3、configurationProperties的作用是什么，会导致source执行两次？
+		    1 = {AnsiOutputApplicationListener@2179} --参数spring.output.ansi.enabled、spring.output.ansi.console-available，终端支持ANSI，彩色输出
+		    2 = {LoggingApplicationListener@1237}--initialize()
+		    3 = {ClasspathLoggingApplicationListener@2180} --debug时打印classpath
+		    4 = {BackgroundPreinitializer@1353} --未处理
+		    5 = {DelegatingApplicationListener@1356} --参数context.listener.classes有值时，生成一个SimpleApplicationEventMulticaster，加载对应listener并发布event，代理类
+		    6 = {FileEncodingApplicationListener@2181} --如果配置了spring.mandatory-file-encoding参数，和系统参数file.encoding不一致会报错
+
+        --绑定参数spring.main=当前实例
+        --再次ConfigurationPropertySources.attach()，替换原configurationProperties
+
+    6)configureIgnoreBeanInfo
+        如果系统参数spring.beaninfo.ignore为空，赋值enviroment中的spring.beaninfo.ignore值，默认true
+    7)打印Banner
+        获取图片--spring.banner.image.location|banner.gif.jpg.png
+        获取txt--banner.txt
+    8)createApplicationContext()
+        WEB: org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext
+        RE:org.springframework.boot.web.reactive.context.AnnotationConfigReactiveWebServerApplicationContext
+        DE:org.springframework.context.annotation.AnnotationConfigApplicationContext
+    9)初始化SpringBootExceptionReporter类
+        FailureAnalyzers--
+    10) prepareContext()
+        *context.setEnviroment
+        --postProcessApplicationContext()
+            *可定制-beanNameGenerator、resourceLoader、resourceLoader
+            *配置ApplicationConversionService
+         --发布ApplicationContextInitializedEvent
+            DelegatingApplicationListener--代理事件发布
+         --打印starting  以及 active profile infos  日志
+         --beanFactory.registerSingleton():默认是DefaultListableBeanFactory
+            *springApplicationArguments
+            *springBootBanner
+        --getAllSources()？
+        --load()?
+        --发布ApplicationPreparedEvent
+
+
+
+
+
+
 	 
 3、注解
 	@SpringBootApplication	 
