@@ -1,0 +1,6 @@
+com:
+  param:
+    test: comfig-yml
+spring.:
+  application:
+    json: fastjson

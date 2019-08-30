@@ -177,7 +177,7 @@ getSpringFactoriesInstances
 
 						    --遍历loacations->
 							    if location.endsWith("/")，调用getSearchNames(),
-								    *spring.config.name自动配置名
+								    *spring.config.name配置文件名
 								    *默认name=application
 							     else name=null(指定location值含文件名时)
 							    --load() 加载文件配置MutablePropertySources，保存到loaded属性
@@ -194,9 +194,9 @@ getSpringFactoriesInstances
 						        config/application-default.properties > config/application-default.yml > application-default.properties > application-default.yml > config/application.properties > config/application.yml > application.properties > application.yml
 
 						疑问UNDO:
-						    1、配置参数值是值怎么赋值给bean的时？
+						    1、配置参数值是值怎么赋值给bean的时？refresh()初始Bean并注册到BeanFactory中时
 						    2、配置参数最后使用哪个值？propertySources中优先级最高的最后加载？
-						    3、configurationProperties的作用是什么，会导致source执行两次？
+						    3、configurationProperties的作用是什么，会导致source执行两次？对全量sourceProperty的引用
 		    1 = {AnsiOutputApplicationListener@2179} --参数spring.output.ansi.enabled、spring.output.ansi.console-available，终端支持ANSI，彩色输出
 		    2 = {LoggingApplicationListener@1237}--initialize()
 		    3 = {ClasspathLoggingApplicationListener@2180} --debug时打印classpath
@@ -230,15 +230,87 @@ getSpringFactoriesInstances
             *springApplicationArguments
             *springBootBanner
         --getAllSources()？
+            默认是启动类Class
         --load()?
+            遍历sourcesr
+                --if isComponent()是否含有@Component注解
+                    packages：java.lang,org.springframework.lang,
+                    策略：TYPE_HIERARCHY including superclasses and implemented interfaces
+                    search-org.springframework.stereotype.Component
+                    示例：启动类interface org.springframework.boot.autoconfigure.SpringBootApplication
+                        AnnotationTypeMappings.forAnnotationType(type)方法获取所有的注解列表
+                        遍历判断是否含有org.springframework.stereotype.Component
+                        注解继承关系@SpringBootConfiguration->@Configuration->@Component
+                 true--AnnotatedBeanDefinitionReader.register(Class)
+                    幂等register
+                    实际调用DefaultListableBeanFactory.registerBeanDefinition()
+                    --只是register beanName? 没有调用registerSingleton()方法，什么时候才真正开始注册Component对象呢？
+
+                AnnotationConfigServletWebServerApplicationContext extends ServletWebServerApplicationContext
+                *AnnotatedBeanDefinitionReader
+                *ClassPathBeanDefinitionScanner
+                *annotatedClasses=new LinkedHashSet<>()
+                *basePackages String[]
+                *-s DefaultListableBeanFactory beanFactory
+                Bean的初始化是在refresh refreshed
+                注解工具类AnnotationUtil递归findAnnotation标记类是否有注解，有cache
+
         --发布ApplicationPreparedEvent
+            -- 遍历listener，添加context属性
+            --处理类
+            0 = ConfigFileApplicationListener
+                --context中BeanFactoryPostProcessor：PropertySourceOrderingPostProcessor
+            1 = LoggingApplicationListener
+                 --beanFactory中注册 springBootLoggingSystem、springBootLogFile、springBootLoggerGroups
+            3 = {DelegatingApplicationListener@2150}
+                --event转发
+    11)refreshContext()
+
+    12)afterRefresh()
+    13)stopWatch.stop()
+    14)发布ApplicationStartedEvent--SimpleApplicationEventMulticaster已经替换为refreshContext()中新生成的，
+        包含beanFactory中新加载的listener
+    15)callRunners()
+        --contxt中所有的ApplicationRunner.class对象
+        --contxt中所有的CommandLineRunner.class对象
+        执行ApplicationRunner.run(),CommandLineRunner.run()
+    16)发布ApplicationReadyEvent
+        BackgroundPreinitializer,CountDownLatch.await()，等待异步预初始化结束
+
+
+
+context.beanFactory.addBeanPostProcessor
+ApplicationContextAwareProcessor
+ApplicationListenerDetector
+
+beanFactory.registerSingleton
+environment、systemProperties、systemEnvironment
+
+
+invokeBeanFactoryPostProcessors()
+*从context中添加到beanFactory中：
+SharedMetadataReaderFactoryContextInitializer$CachingMetadataReaderFactoryPostProcessor
+ConfigurationWarningsApplicationContextInitializer$ConfigurationWarningsPostProcessor
+ConfigFileApplicationListener$PropertySourceOrderingPostProcessor
+
+ConfigurationClassParser.parse()获取解析所有的@Configuration类
+--parse()
+--deferredImportSelectorHandler.process()
+所有的配置类，包括引用jar包里的，
+
+import类注册
+AutoConfigurationPackages.Registrar
+
+
+新生成一个applicationEventMulticaster(注入beanFactory)，注册到beanFactory
 
 
 
 
 
 
-	 
+
+
 3、注解
 	@SpringBootApplication	 
 		@SpringBootConfiguration ->@Configuration

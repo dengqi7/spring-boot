@@ -18,12 +18,23 @@ package org.springframework.boot.tests.hibernate52;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 
 @SpringBootApplication
 public class Hibernate52Application {
 
 	public static void main(String[] args) {
-		SpringApplication.run(Hibernate52Application.class, args);
+		ConfigurableApplicationContext context = SpringApplication.run(Hibernate52Application.class, args);
+//		ConfigurableApplicationContext context = SpringApplication.run(Hibernate52Application.class, "--spring.application.json={\"testParam\":1}");
+//		paramsTest(context);
+	}
+
+	private static void paramsTest(ConfigurableApplicationContext context) {
+		String key = "com.param.test";
+		System.out.println("-----");
+		if(context.getEnvironment().containsProperty(key)){
+			System.out.println(context.getEnvironment().getProperty(key,"no prams"));
+		}
 	}
 
 }

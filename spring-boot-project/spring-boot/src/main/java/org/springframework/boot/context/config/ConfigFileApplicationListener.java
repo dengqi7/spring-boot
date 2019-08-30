@@ -16,24 +16,7 @@
 
 package org.springframework.boot.context.config;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
-
 import org.apache.commons.logging.Log;
-
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -54,20 +37,17 @@ import org.springframework.context.annotation.ConfigurationClassPostProcessor;
 import org.springframework.context.event.SmartApplicationListener;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
-import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.MutablePropertySources;
-import org.springframework.core.env.Profiles;
-import org.springframework.core.env.PropertySource;
+import org.springframework.core.env.*;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.io.support.SpringFactoriesLoader;
-import org.springframework.util.Assert;
-import org.springframework.util.CollectionUtils;
-import org.springframework.util.ObjectUtils;
-import org.springframework.util.ResourceUtils;
-import org.springframework.util.StringUtils;
+import org.springframework.util.*;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 /**
  * {@link EnvironmentPostProcessor} that configures the context environment by loading
@@ -480,7 +460,9 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 			if (profile != null) {
 				// Try profile-specific file & profile section in profile file (gh-340)
 				String profileSpecificFile = prefix + "-" + profile + fileExtension;
+				//匹配规则--文件中无profiles值时加载
 				load(loader, profileSpecificFile, profile, defaultFilter, consumer);
+				//匹配规则--文件中有profiles值，加载指定的profile
 				load(loader, profileSpecificFile, profile, profileFilter, consumer);
 				// Try profile specific sections in files we've already processed
 				for (Profile processedProfile : this.processedProfiles) {
@@ -629,7 +611,7 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 			locations.addAll(
 					asResolvedSet(ConfigFileApplicationListener.this.searchLocations, DEFAULT_SEARCH_LOCATIONS));
 			return locations;
-		}
+	}
 
 		private Set<String> getSearchLocations(String propertyName) {
 			Set<String> locations = new LinkedHashSet<>();
@@ -665,6 +647,7 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 		private void addLoadedPropertySources() {
 			MutablePropertySources destination = this.environment.getPropertySources();
 			List<MutablePropertySources> loaded = new ArrayList<>(this.loaded.values());
+			//倒叙，profile=null在最后
 			Collections.reverse(loaded);
 			String lastAdded = null;
 			Set<String> added = new HashSet<>();
@@ -703,8 +686,10 @@ public class ConfigFileApplicationListener implements EnvironmentPostProcessor, 
 					activeProfiles.addAll(getDefaultProfiles(binder, "spring.profiles.active"));
 				}
 			}
+			//获取processedProfiles中profile!=null&&profile!=default的值
 			this.processedProfiles.stream().filter(this::isDefaultProfile).map(Profile::getName)
 					.forEach(activeProfiles::add);
+			//添加到environment.activeProfiles
 			this.environment.setActiveProfiles(activeProfiles.toArray(new String[0]));
 		}
 
