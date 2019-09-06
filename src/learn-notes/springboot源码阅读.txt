@@ -216,6 +216,19 @@ getSpringFactoriesInstances
         WEB: org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext
         RE:org.springframework.boot.web.reactive.context.AnnotationConfigReactiveWebServerApplicationContext
         DE:org.springframework.context.annotation.AnnotationConfigApplicationContext
+
+        初始化AnnotationConfigServletWebServerApplicationContext
+        AnnotatedBeanDefinitionReader reader
+            **ConditionEvaluator
+            **environment为StandardServletEnvironment
+            **beanFactory为DefaultListableBeanFactory
+            beanFactory中注入ConfigProcessors的BeanDefinition
+              *beanDefinitionMap-
+              *beanDefinitionNames-
+
+        ClassPathBeanDefinitionScanner scanner
+            scanner默认处理的注解：@Component、@Repository、@Service、@Controller
+
     9)初始化SpringBootExceptionReporter类
         FailureAnalyzers--
     10) prepareContext()
@@ -223,17 +236,48 @@ getSpringFactoriesInstances
         --postProcessApplicationContext()
             *可定制-beanNameGenerator、resourceLoader、resourceLoader
             *配置ApplicationConversionService
-         --发布ApplicationContextInitializedEvent
+        --applyInitializers()
+          application的 initializers属性，初始化时加载的
+          遍历调用ApplicationContextInitializer接口的initialize()方法，context为入参
+
+               2)SharedMetadataReaderFactoryContextInitializer-无处理
+                    --context.addBeanFactoryPostProcessor,CachingMetadataReaderFactoryPostProcessor
+               3)ContextIdApplicationContextInitializer
+                    --new ContextId-id默认为application,child标识为AtomicLong(0)
+                    context.id赋值
+                    beanFactory注册ContextId
+               4)ConfigurationWarningsApplicationContextInitializer
+                    context.addBeanFactoryPostProcessor ConfigurationWarningsPostProcessor
+               5)ServerPortInfoApplicationContextInitializer
+                    application.listeners属性添加这个实例作到列表
+               6)ConditionEvaluationReportLoggingListener
+                    -application.listenerss属性添加 ConditionEvaluationReportListener
+                    -get fail Report   autoConfigurationReport--ConditionEvaluationReport
+
+        --发布ApplicationContextInitializedEvent
             DelegatingApplicationListener--代理事件发布
          --打印starting  以及 active profile infos  日志
          --beanFactory.registerSingleton():默认是DefaultListableBeanFactory
             *springApplicationArguments
             *springBootBanner
-        --getAllSources()？
+            *beanFactory的allowBeanDefinitionOverriding false
+
+        --getAllSources()
             默认是启动类Class
         --load()?
-            遍历sourcesr
-                --if isComponent()是否含有@Component注解
+            loader = new BeanDefinitionLoader
+                **sources:启动类Class
+                **annotatedReader =new AnnotatedBeanDefinitionReader,同webContext的初始化
+                **xmlReader = new XmlBeanDefinitionReader
+                **scanner = new ClassPathBeanDefinitionScanner 同webContext初始化
+                **scanner.addExcludeFilter()--ClassExcludeFilter--classNames属性，保存了应扫描过的类，此处存的是启动类ClassName
+
+            loader.load()
+              遍历sources
+                load(..sources..)
+                --swich source 类型Class\Resource\Package\CharSequence
+                  load(..source..)-Class
+                    --if isComponent()是否含有@Component注解
                     packages：java.lang,org.springframework.lang,
                     策略：TYPE_HIERARCHY including superclasses and implemented interfaces
                     search-org.springframework.stereotype.Component
@@ -241,10 +285,28 @@ getSpringFactoriesInstances
                         AnnotationTypeMappings.forAnnotationType(type)方法获取所有的注解列表
                         遍历判断是否含有org.springframework.stereotype.Component
                         注解继承关系@SpringBootConfiguration->@Configuration->@Component
-                 true--AnnotatedBeanDefinitionReader.register(Class)
-                    幂等register
-                    实际调用DefaultListableBeanFactory.registerBeanDefinition()
-                    --只是register beanName? 没有调用registerSingleton()方法，什么时候才真正开始注册Component对象呢？
+                    true--AnnotatedBeanDefinitionReader.register(Class)
+                        doRegisterBean()
+                            --new AnnotatedGenericBeanDefinition-启动类的注解BeanDefinition--AnnotationMetadata属性
+                            --判断是否有@Conditional注解
+                            --判断ScopeMetadata--默认singleton
+                            --beanName生成，默认是首字母小写的ClassName，可注解指定beanName
+                            --注解默认处理流程：Lazy、Primary、DependsOn、Role、Description
+                            --new BeanDefinitionHolder
+                            -- 通过ScopedProxyMode确认是否返回代理类的BeanDefinitionHolder
+                            -- BeanDefinitionReaderUtils.registerBeanDefinition()
+                                --context.beanFactory注册BeanDefinition
+                                --如果有配置aliases，遍历注册beanName-alias
+
+                        只是调用DefaultListableBeanFactory.registerBeanDefinition()，没有调用registerSingleton()方法，refreshContext()时才真正注册Component对象呢？
+        --广播事件-ApplicationPreparedEvent
+            在发送事件前会遍历所有listener,if instanceof ApplicationContextAware,setContext。
+
+            1)ConfigFileApplicationListener
+                context.addBeanFactoryPostProcessor  PropertySourceOrderingPostProcessor 配置property-sources
+
+
+
 
                 AnnotationConfigServletWebServerApplicationContext extends ServletWebServerApplicationContext
                 *AnnotatedBeanDefinitionReader
