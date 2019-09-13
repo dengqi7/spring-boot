@@ -11,6 +11,7 @@
 	<description>Spring Boot Build</description>
 	<properties>
 		<revision>2.2.0.BUILD-SNAPSHOT</revision>
+		<disable.checks>true</disable.checks>
 		<main.basedir>${basedir}</main.basedir>
 		<disable.checks>true</disable.checks>
 	</properties>

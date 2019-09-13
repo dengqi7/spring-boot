@@ -240,12 +240,18 @@ public class SpringApplication {
 	 */
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+		//这里是null
 		this.resourceLoader = resourceLoader;
 		Assert.notNull(primarySources, "PrimarySources must not be null");
+		//启动类的Class
 		this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+		//判定webApplicationType,SERVLET\REACTIVE\NONE
 		this.webApplicationType = WebApplicationType.deduceFromClasspath();
+		//初始化Initializer类-spring.factory文件，无参构造器
 		setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+		//初始化Listener类-spring.factory文件，无参构造器
 		setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+		//从stackTrace中找到main方法所在类
 		this.mainApplicationClass = deduceMainApplicationClass();
 	}
 
@@ -271,12 +277,18 @@ public class SpringApplication {
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
+		//时间记录器
 		StopWatch stopWatch = new StopWatch();
+		//开始记录时间
 		stopWatch.start();
 		ConfigurableApplicationContext context = null;
 		Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
+		//以HEADLESS模式运行程序，无显示器、鼠标、键盘等外设设备，读取系统参数java.awt.headless，默认值为true
 		configureHeadlessProperty();
+		//初始化SpringApplicationRunListener类，从spring.factories文件获取，默认值实现类为EventPublishingRunListener；会将SpringApplication实例中的Listener列表注册到内部的事件发布器中
+		//SpringApplicationRunListeners是工厂类，内部存有SpringApplicationRunListener的列表引用，便于扩展。
 		SpringApplicationRunListeners listeners = getRunListeners(args);
+		//发布启动事件，为EventPublishingRunListener发布ApplicationStartingEvent
 		listeners.starting();
 		try {
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
@@ -416,6 +428,7 @@ public class SpringApplication {
 				Class<?> instanceClass = ClassUtils.forName(name, classLoader);
 				Assert.isAssignable(type, instanceClass);
 				Constructor<?> constructor = instanceClass.getDeclaredConstructor(parameterTypes);
+				//反射生成实例，基本类型的属性赋值默认值
 				T instance = (T) BeanUtils.instantiateClass(constructor, args);
 				instances.add(instance);
 			}

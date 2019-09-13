@@ -39,7 +39,7 @@ import org.springframework.util.ErrorHandler;
  *
  * @author Phillip Webb
  * @author Stephane Nicoll
- * @author Andy Wilkinson
+ * @author Andy Wilkinson5
  * @author Artsiom Yudovin
  * @since 1.0.0
  */
@@ -54,6 +54,7 @@ public class EventPublishingRunListener implements SpringApplicationRunListener,
 	public EventPublishingRunListener(SpringApplication application, String[] args) {
 		this.application = application;
 		this.args = args;
+		//观察者模式，初始化一个事件发布器，可以注册Listener,响应发布的EVENT。内部有cache机制，保存有每个EVENT对应的Listener列表。
 		this.initialMulticaster = new SimpleApplicationEventMulticaster();
 		for (ApplicationListener<?> listener : application.getListeners()) {
 			this.initialMulticaster.addApplicationListener(listener);
@@ -67,6 +68,7 @@ public class EventPublishingRunListener implements SpringApplicationRunListener,
 
 	@Override
 	public void starting() {
+		//构建时没有引入线程池，默认是单线程按顺序逐个调用ApplicationListener.onApplicationEvent()方法
 		this.initialMulticaster.multicastEvent(new ApplicationStartingEvent(this.application, this.args));
 	}
 
