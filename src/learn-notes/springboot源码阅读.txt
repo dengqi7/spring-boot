@@ -328,7 +328,53 @@ getSpringFactoriesInstances
                 --event转发
     11)refreshContext()
 
+
+        5)invokeBeanFactoryPostProcessors(beanFactory)
+            BeanDefinitionRegistryPostProcessor
+            --invokeBeanFactoryPostProcessors()前面步骤注册的BeanFactoryPostProcessor实例化并且调用
+                invokeBeanDefinitionRegistryPostProcessors()
+                    ConfigurationClassPostProcessor
+                    ConfigurationClassParser
+                    --parse()
+                     --doProcessConfigurationClass():@Component、@PropertySources、@ComponentScans、@Import、@ImportResource、@Bean-methods、default method
+                        @Configuration类如果有父类（非java包），递归
+
+                        默认的import类-4个：
+                        0 org.springframework.boot.autoconfigure.AutoConfigurationPackages$Registrar
+                        1 org.springframework.boot.autoconfigure.AutoConfigurationImportSelector
+                        2 org.springframework.boot.context.properties.ConfigurationPropertiesScanRegistrar
+                        3 org.springframework.boot.context.properties.ConfigurationPropertiesBindingPostProcessorRegistrar
+                     --deferredImportSelectorHandler.process()
+                        ？做什么用，再执行一次？
+
+            --invokeBeanFactoryPostProcessors()
+                ConfigurationClassPostProcessor
+                 addBeanPostProcessor()-  ImportAwareBeanPostProcessor
+
+            BeanFactoryPostProcessor
+            --invokeBeanFactoryPostProcessors()
+                PropertySourcesPlaceholderConfigurer:将??中的占位符用propertiesSource中的值代替
+
+            EventListenerMethodProcessor：？？
+
+        6)registerBeanPostProcessors()
+            BeanPostProcessor
+                beanFactory.addBeanPostProcessor()--CopyOnWriteArrayList()，有序
+
+        7)initMessageSource()
+
+        8)initApplicationEventMulticaster()
+            新初始化一个SimpleApplicationEventMulticaster，暂时为添加listener
+        9)onRefresh()
+
+        10)registerListeners()
+
+
+
+
     12)afterRefresh()
+
+
     13)stopWatch.stop()
     14)发布ApplicationStartedEvent--SimpleApplicationEventMulticaster已经替换为refreshContext()中新生成的，
         包含beanFactory中新加载的listener
