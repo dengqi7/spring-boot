@@ -327,6 +327,30 @@ getSpringFactoriesInstances
             3 = {DelegatingApplicationListener@2150}
                 --event转发
     11)refreshContext()
+        -refresh() AbstractApplication
+            --prepareRefresh()
+                initPropertySources()--web有关的propertySource操作
+                    propertySource还未使用，但可以通过PropertySourcesPropertyResolver.getProperty(key)获取value值，遍历PropertySource集合,return first Key-value
+                earlyListeners add to ....
+            --obtainFreshBeanFactory()
+
+            --prepareBeanFactory(beanFactory)
+                。。。
+                beanFactory.addBeanPostProcessor  ApplicationContextAwareProcessor、ApplicationListenerDetector
+                registerResolvableDependency
+                registerSingleton ：environment、systemProperties、systemEnvironment，只能registe一次，实际调用addSingleton方法
+
+            --
+                beanFactory.addBeanPostProcessor    WebApplicationContextServletContextAwareProcessor
+
+
+
+
+
+
+
+
+
 
 
         5)invokeBeanFactoryPostProcessors(beanFactory)
