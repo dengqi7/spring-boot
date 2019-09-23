@@ -338,7 +338,7 @@ getSpringFactoriesInstances
                 。。。
                 beanFactory.addBeanPostProcessor  ApplicationContextAwareProcessor、ApplicationListenerDetector
                 registerResolvableDependency
-                registerSingleton ：environment、systemProperties、systemEnvironment，只能registe一次，实际调用addSingleton方法
+                registerSingleton ：environment、systemProperties、systemEnvironment，只能register一次，实际调用addSingleton方法
 
             --
                 beanFactory.addBeanPostProcessor    WebApplicationContextServletContextAwareProcessor
@@ -390,7 +390,8 @@ getSpringFactoriesInstances
         8)initApplicationEventMulticaster()
             新初始化一个SimpleApplicationEventMulticaster，暂时为添加listener
         9)onRefresh()
-
+            实际调用UiApplicationContextUtils.initThemeSource(context)
+            初始化ThemeSource
         10)registerListeners()
 
 
